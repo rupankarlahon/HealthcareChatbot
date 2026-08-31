@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Blob Bot States</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 40%, #fffaf3 0%, #fdeee0 55%, #fbe3d3 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, "Segoe UI", sans-serif;
+    }
+
+    .blob-wrap {
+      position: relative;
+      width: 220px;
+      height: 220px;
+    }
+
+    /* soft glowing outer ring - stays put, does not turn with the head */
+    .blob-glow {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 45%,
+          rgba(255, 255, 255, 0.95) 0%,
+          rgba(255, 235, 220, 0.55) 40%,
+          rgba(255, 214, 190, 0.0) 72%);
+      filter: blur(6px);
+    }
+
+    /* everything below this turns together like a head, pivoting on its own center */
+    .head {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 150px;
+      height: 150px;
+      transform: translate(-50%, -50%) rotate(0deg);
+      transform-origin: 50% 50%;
+      transition: transform 0.08s linear;
+      will-change: transform;
+    }
+
+    /* main face blob */
+    .blob-face {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 35% 30%, #ffffff 0%, #fff5ec 30%, #ffe9d8 60%, #ffdcc2 100%);
+      filter: blur(3px);
+      box-shadow: 0 10px 40px rgba(255, 190, 150, 0.35);
+    }
+
+    /* blush cheeks */
+    .cheek {
+      position: absolute;
+      width: 30px;
+      height: 20px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 150, 160, 0.55) 0%, rgba(255, 150, 160, 0) 70%);
+      filter: blur(4px);
+      top: 58%;
+    }
+
+    .cheek.left {
+      left: 12%;
+    }
+
+    .cheek.right {
+      left: 58%;
+    }
+
+    /* ---- face states, all stacked and centered within the head, crossfaded via opacity ---- */
+    .face-state {
+      position: absolute;
+      top: 44%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.35s ease;
+    }
+
+    .face-state.active {
+      opacity: 1;
+    }
+
+    /* typing dots */
+    .dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dots span {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #4a4a52;
+      animation: dotPulse 1.1s infinite ease-in-out;
+    }
+
+    .dots span:nth-child(1) {
+      animation-delay: 0s;
+    }
+
+    .dots span:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+
+    .dots span:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+
+    @keyframes dotPulse {
+
+      0%,
+      60%,
+      100% {
+        transform: translateY(0);
+        opacity: 0.5;
+      }
+
+      30% {
+        transform: translateY(-4px);
+        opacity: 1;
+      }
+    }
+
+    /* smile */
+    .smile svg {
+      width: 34px;
+      height: 18px;
+      display: block;
+    }
+
+    .smile path {
+      fill: none;
+      stroke: #4a4a52;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+
+    /* idle eyes */
+    .eyes {
+      display: flex;
+      gap: 13px;
+    }
+
+    .eyes .eye-socket {
+      position: relative;
+      width: 4px;
+      height: 16px;
+    }
+
+    .eyes .eye {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 4px;
+      height: 16px;
+      margin-left: -2px;
+      margin-top: -8px;
+      border-radius: 3px;
+      background: #4a4a52;
+      transform-origin: 50% 50%;
+      transition: height 0.12s ease;
+      /* translate + rotate toward cursor are applied inline by JS */
+    }
+
+    .blob-wrap.blink .eyes .eye {
+      height: 2px;
+    }
+
+    .controls {
+      position: fixed;
+      bottom: 24px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .controls button {
+      border: 1px solid #e8cdb8;
+      background: #fff;
+      color: #a9765a;
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .controls button:hover {
+      background: #fff3e9;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="blob-wrap" id="blob">
+    <div class="blob-glow"></div>
+
+    <div class="head" id="head">
+      <div class="blob-face"></div>
+      <div class="cheek left"></div>
+      <div class="cheek right"></div>
+    </div>
+
+    <!-- face states sit OUTSIDE the rotating head, so their base position stays fixed;
+         only the pupils inside get their own small look-offset -->
+    <div class="face-state dots-state" data-state="typing">
+      <div class="dots"><span></span><span></span><span></span></div>
+    </div>
+
+    <div class="face-state smile-state" data-state="smile">
+      <div class="smile">
+        <svg viewBox="0 0 34 18">
+          <path d="M2 2 Q17 20 32 2" />
+        </svg>
+      </div>
+    </div>
+
+    <div class="face-state eyes-state" data-state="idle">
+      <div class="eyes">
+        <div class="eye-socket">
+          <div class="eye" id="eyeLeft"></div>
+        </div>
+        <div class="eye-socket">
+          <div class="eye" id="eyeRight"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button onclick="setBlobState('typing')">Typing</button>
+    <button onclick="setBlobState('smile')">Smile</button>
+    <button onclick="setBlobState('idle')">Idle</button>
+  </div>
+
+  <script>
+    const blobWrap = document.getElementById('blob');
+    const states = document.querySelectorAll('.face-state');
+
+    // Expose globally so it can be wired into a real chatbot:
+    // e.g. call setBlobState('typing') while waiting on a response,
+    // then setBlobState('smile') briefly when the reply arrives,
+    // then setBlobState('idle') to rest on the eyes.
+    window.setBlobState = function (state) {
+      states.forEach(el => {
+        el.classList.toggle('active', el.dataset.state === state);
+      });
+    };
+
+    // start idle
+    setBlobState('idle');
+
+    // ---- head turns toward the cursor, eyes glance a little further in that direction ----
+    // The blob-wrap itself never moves from its fixed spot; only the .head
+    // (face + cheeks + eyes) rotates/tilts, like a head turning to look at the cursor.
+    const head = document.getElementById('head');
+    const eyeLeft = document.getElementById('eyeLeft');
+    const eyeRight = document.getElementById('eyeRight');
+    const sockets = document.querySelectorAll('.eye-socket');
+
+    const MAX_HEAD_ROTATE = 10;  // degrees the head tilts toward the cursor
+    const MAX_HEAD_SHIFT = 6;   // px the head nudges toward the cursor
+    const MAX_EYE_OFFSET = 4;   // px the pupil drifts within its socket
+
+    let mouseX = window.innerWidth / 2;
+    let mouseY = window.innerHeight / 2;
+    let curRotate = 0, curShiftX = 0, curShiftY = 0; // eased current values
+
+    window.addEventListener('mousemove', (e) => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+    });
+    window.addEventListener('touchmove', (e) => {
+      const t = e.touches[0];
+      if (t) { mouseX = t.clientX; mouseY = t.clientY; }
+    }, { passive: true });
+
+    function updateHeadAndEyes() {
+      const rect = head.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+
+      const dx = mouseX - cx;
+      const dy = mouseY - cy;
+      const angle = Math.atan2(dy, dx);
+
+      // clamp horizontal/vertical influence independently so it feels like a head turn
+      const normX = Math.max(-1, Math.min(1, dx / 400));
+      const normY = Math.max(-1, Math.min(1, dy / 400));
+
+      const targetRotate = normX * MAX_HEAD_ROTATE;   // turn left/right
+      const targetShiftX = normX * MAX_HEAD_SHIFT;
+      const targetShiftY = normY * MAX_HEAD_SHIFT * 0.6;
+
+      // ease toward target for a smooth, slightly weighty head-turn feel
+      curRotate += (targetRotate - curRotate) * 0.12;
+      curShiftX += (targetShiftX - curShiftX) * 0.12;
+      curShiftY += (targetShiftY - curShiftY) * 0.12;
+
+      head.style.transform =
+        `translate(calc(-50% + ${curShiftX}px), calc(-50% + ${curShiftY}px)) rotate(${curRotate}deg)`;
+
+      // pupils glance further toward the cursor within their sockets
+      [[eyeLeft, sockets[0]], [eyeRight, sockets[1]]].forEach(([eye, socket]) => {
+        const srect = socket.getBoundingClientRect();
+        const scx = srect.left + srect.width / 2;
+        const scy = srect.top + srect.height / 2;
+
+        const edx = mouseX - scx;
+        const edy = mouseY - scy;
+        const eAngle = Math.atan2(edy, edx);
+        const eDist = Math.min(Math.hypot(edx, edy), MAX_EYE_OFFSET);
+
+        const offsetX = Math.cos(eAngle) * eDist;
+        const offsetY = Math.sin(eAngle) * eDist;
+        const rotateDeg = (eAngle * 180 / Math.PI) + 90;
+
+        eye.style.transform =
+          `translate(${offsetX}px, ${offsetY}px) rotate(${rotateDeg}deg)`;
+      });
+
+      requestAnimationFrame(updateHeadAndEyes);
+    }
+    updateHeadAndEyes();
+
+    // occasional blink while idle
+    function blink() {
+      if (blobWrap.querySelector('.eyes-state').classList.contains('active')) {
+        blobWrap.classList.add('blink');
+        setTimeout(() => blobWrap.classList.remove('blink'), 160);
+      }
+      setTimeout(blink, 2500 + Math.random() * 3000);
+    }
+    setTimeout(blink, 2000);
+
+    // ---- demo auto-cycle matching the reference video: ----
+    // typing (thinking) -> smile (reply arrived) -> idle (resting)
+    function demoCycle() {
+      setBlobState('typing');
+      setTimeout(() => setBlobState('smile'), 1800);
+      setTimeout(() => setBlobState('idle'), 2500);
+      setTimeout(demoCycle, 6000);
+    }
+    setTimeout(demoCycle, 1500);
+  </script>
+
+</body>
+
+</html>
