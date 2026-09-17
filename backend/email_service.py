@@ -6,7 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def send_booking_email(patient_name: str, contact_info: str, booking_type: str, details: str, booking_id: int):
+def send_booking_email(patient_name: str, booking_type: str, details: str, booking_id: int, email: str = None):
     """
     Sends an automated email via Gmail SMTP to both the patient and the company.
     """
@@ -32,7 +32,7 @@ def send_booking_email(patient_name: str, contact_info: str, booking_type: str, 
             <p style="margin: 5px 0 0 0;"><strong>Details:</strong> {details}</p>
           </div>
           
-          <p>Our team will reach out to you shortly at {contact_info}.</p>
+          <p>Our team will reach out to you shortly via WhatsApp to confirm details.</p>
           <p>Best regards,<br>The HealBridge Team</p>
         </div>
       </body>
@@ -51,7 +51,7 @@ def send_booking_email(patient_name: str, contact_info: str, booking_type: str, 
             <p style="margin: 0;"><strong>Booking ID:</strong> #{booking_id}</p>
             <p style="margin: 5px 0 0 0;"><strong>Service:</strong> {booking_type}</p>
             <p style="margin: 5px 0 0 0;"><strong>Patient Name:</strong> {patient_name}</p>
-            <p style="margin: 5px 0 0 0;"><strong>Contact Info:</strong> {contact_info}</p>
+            <p style="margin: 5px 0 0 0;"><strong>Patient Email:</strong> {email if email else 'Not Provided'}</p>
             <hr style="margin: 10px 0; border: none; border-top: 1px solid #eee;" />
             <p style="margin: 0;"><strong>Details:</strong> {details}</p>
           </div>
@@ -63,7 +63,7 @@ def send_booking_email(patient_name: str, contact_info: str, booking_type: str, 
     """
 
     try:
-        is_patient_email = "@" in contact_info
+        is_patient_email = email and "@" in email
 
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(sender_email, sender_password)
@@ -81,15 +81,15 @@ def send_booking_email(patient_name: str, contact_info: str, booking_type: str, 
                 msg_patient = MIMEMultipart("alternative")
                 msg_patient["Subject"] = f"Confirmation: {booking_type} for {patient_name}"
                 msg_patient["From"] = f"HealBridge <{sender_email}>"
-                msg_patient["To"] = contact_info
+                msg_patient["To"] = email
                 msg_patient.attach(MIMEText(patient_html, "html"))
-                server.sendmail(sender_email, [contact_info], msg_patient.as_string())
+                server.sendmail(sender_email, [email], msg_patient.as_string())
 
         
         if is_patient_email:
-            logger.info(f"Booking confirmation email sent to patient ({contact_info}) and company ({company_email})")
+            logger.info(f"Booking confirmation email sent to patient ({email}) and company ({company_email})")
         else:
-            logger.info(f"Booking confirmation email sent to company ONLY ({company_email}) since patient used a phone number.")
+            logger.info(f"Booking confirmation email sent to company ONLY ({company_email}) since patient did not provide an email.")
         return True
     except Exception as e:
         logger.error(f"Failed to send email: {e}")

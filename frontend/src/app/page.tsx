@@ -175,6 +175,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
@@ -224,6 +225,11 @@ export default function Home() {
       setOrbState("idle");
     } finally {
       setIsLoading(false);
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, 50);
     }
   };
 
@@ -452,6 +458,7 @@ export default function Home() {
                 {/* Chat Input */}
                 <form onSubmit={onSubmit} className="relative w-full flex items-center z-10 bg-white/20 backdrop-blur-[40px] border border-white/60 shadow-[inset_0_0_20px_rgba(255,255,255,0.8),0_15px_35px_rgba(0,0,0,0.05)] rounded-full transition-all duration-300 ease-out focus-within:scale-[1.03] focus-within:bg-white/30 focus-within:border-white focus-within:shadow-[inset_0_0_25px_rgba(255,255,255,1),0_20px_40px_rgba(0,0,0,0.08)] overflow-hidden">
                 <input
+                  ref={inputRef}
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}

@@ -2,25 +2,29 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from database import SessionLocal, Booking
 from email_service import send_booking_email
+from whatsapp_service import send_whatsapp_receipt
 import json
 
 class BookingInput(BaseModel):
     booking_type: str = Field(default="", description="The type of service (e.g. 'Medicine Delivery', 'Lab Collection', 'Home Care Nurse')")
     patient_name: str = Field(default="", description="The first and last name of the patient")
-    contact_info: str = Field(default="", description="The email or phone number of the patient")
+    phone_number: str = Field(default="", description="The phone number of the patient (MANDATORY)")
+    email: str = Field(default="", description="The email of the patient (OPTIONAL)")
     details: str = Field(default="", description="Additional details like date, address, or specific medicines requested")
     is_confirmed: bool = Field(default=False, description="Set to True ONLY if the user's VERY LAST message explicitly said 'Yes' or 'Confirmed' to your summary. If False, the system will block the booking.")
 
 @tool("create_booking", args_schema=BookingInput)
-def create_booking(booking_type: str, patient_name: str, contact_info: str, details: str, is_confirmed: bool) -> str:
+def create_booking(booking_type: str, patient_name: str, phone_number: str, details: str, is_confirmed: bool, email: str = "") -> str:
     """
     Creates a new healthcare booking in the database.
-    Call this tool ONLY when you have gathered the patient's name, contact info, and booking details.
+    Call this tool ONLY when you have gathered the patient's name, phone number, and booking details.
     """
-    print(f"DEBUG: create_booking called with type={booking_type}, name={patient_name}, contact={contact_info}, details={details}, confirmed={is_confirmed}")
+    print(f"DEBUG: create_booking called with type={booking_type}, name={patient_name}, phone={phone_number}, email={email}, details={details}, confirmed={is_confirmed}")
     
     if not is_confirmed:
-        return json.dumps({"success": False, "message": "Error: You cannot create the booking yet. You must first summarize the details and ask the user 'Does this look correct? Reply Yes to confirm.'"})
+        err = json.dumps({"success": False, "message": "Error: You cannot create the booking yet. You must first summarize the details and ask the user 'Does this look correct? Reply Yes to confirm.'"})
+        print("DEBUG: create_booking validation error:", err)
+        return err
     
     invalid_placeholders = ["unknown", "n/a", "none", "", "not provided", "tbd", "placeholder", "null", "user's name", "your name", "full name"]
     
@@ -29,23 +33,32 @@ def create_booking(booking_type: str, patient_name: str, contact_info: str, deta
         return bool(re.search(r'[\[\]\<\>\{\}]', text))
     
     if not booking_type or booking_type.lower().strip() in invalid_placeholders or contains_brackets(booking_type):
-        return json.dumps({"success": False, "message": "Error: You must determine the exact booking_type (e.g., 'Medicine Delivery', 'Lab Collection') before calling. Do not use placeholders like [type]."})
+        err = json.dumps({"success": False, "message": "Error: You must determine the exact booking_type (e.g., 'Medicine Delivery', 'Lab Collection') before calling. Do not use placeholders like [type]."})
+        print("DEBUG: create_booking validation error:", err)
+        return err
     
     if not patient_name or patient_name.lower().strip() in invalid_placeholders or len(patient_name) < 2 or contains_brackets(patient_name):
-        return json.dumps({"success": False, "message": "Error: You must ask the user for their real patient_name before calling this tool. Do not use placeholders like [user's name]."})
+        err = json.dumps({"success": False, "message": "Error: You must ask the user for their real patient_name before calling this tool. Do not use placeholders like [user's name]."})
+        print("DEBUG: create_booking validation error:", err)
+        return err
         
-    if not contact_info or contact_info.lower().strip() in invalid_placeholders or len(contact_info) < 4 or contains_brackets(contact_info):
-        return json.dumps({"success": False, "message": "Error: You must ask the user for their real contact_info before calling this tool. Do not use placeholders like [phone number]."})
+    if not phone_number or phone_number.lower().strip() in invalid_placeholders or len(phone_number) < 4 or contains_brackets(phone_number):
+        err = json.dumps({"success": False, "message": "Error: You must ask the user for their real phone number before calling this tool. Do not use placeholders like [phone number]."})
+        print("DEBUG: create_booking validation error:", err)
+        return err
         
     if not details or details.lower().strip() in invalid_placeholders or len(details) < 4 or contains_brackets(details):
-        return json.dumps({"success": False, "message": "Error: You must ask the user for specific booking details before calling this tool. Do not use placeholders."})
+        err = json.dumps({"success": False, "message": "Error: You must ask the user for specific booking details before calling this tool. Do not use placeholders."})
+        print("DEBUG: create_booking validation error:", err)
+        return err
 
     db = SessionLocal()
     try:
         new_booking = Booking(
             booking_type=booking_type,
             patient_name=patient_name,
-            contact_info=contact_info,
+            phone_number=phone_number.strip(),
+            email=email.strip() if email else None,
             details=details,
             status="Confirmed"
         )
@@ -62,7 +75,7 @@ def create_booking(booking_type: str, patient_name: str, contact_info: str, deta
                 wb = Workbook()
                 ws = wb.active
                 ws.title = "Bookings"
-                ws.append(["ID", "Date", "Service", "Patient Name", "Contact Info", "Details", "Status"])
+                ws.append(["ID", "Date", "Service", "Patient Name", "Phone", "Email", "Details", "Status"])
             else:
                 wb = load_workbook(excel_path)
                 ws = wb.active
@@ -72,7 +85,8 @@ def create_booking(booking_type: str, patient_name: str, contact_info: str, deta
                 new_booking.created_at.strftime("%Y-%m-%d %H:%M:%S") if new_booking.created_at else "",
                 new_booking.booking_type,
                 new_booking.patient_name,
-                new_booking.contact_info,
+                new_booking.phone_number,
+                new_booking.email or "N/A",
                 new_booking.details,
                 new_booking.status
             ])
@@ -80,12 +94,18 @@ def create_booking(booking_type: str, patient_name: str, contact_info: str, deta
         except Exception as excel_err:
             print(f"Warning: Failed to save to Excel: {excel_err}")
         
+        # Dispatch WhatsApp Receipt
+        send_whatsapp_receipt(
+            phone_number=phone_number.strip(),
+            booking_id=new_booking.id,
+            booking_type=booking_type,
+            details=details
+        )
+        
         # Dispatch Gmail SMTP Notification
-        # The email_service will intelligently send to both Patient and Company if contact_info is an email,
-        # otherwise it will send ONLY to the Company if contact_info is a phone number.
         send_booking_email(
             patient_name=patient_name,
-            contact_info=contact_info.strip(),
+            email=email.strip() if email else None,
             booking_type=booking_type,
             details=details,
             booking_id=new_booking.id
@@ -102,31 +122,35 @@ def create_booking(booking_type: str, patient_name: str, contact_info: str, deta
                 "status": "Confirmed"
             }
         }
-        return json.dumps(result)
+        result_json = json.dumps(result)
+        print("DEBUG: create_booking success result:", result_json)
+        return result_json
     except Exception as e:
         db.rollback()
-        return json.dumps({"success": False, "message": f"Database error: {str(e)}"})
+        error_result = json.dumps({"success": False, "message": f"An error occurred: {str(e)}"})
+        print("DEBUG: create_booking exception result:", error_result)
+        return error_result
     finally:
         db.close()
 
 class LookupInput(BaseModel):
-    contact_info: str = Field(default="", description="The email or phone number of the patient to search for")
+    phone_number: str = Field(default="", description="The phone number of the patient to search for")
 
 @tool("lookup_booking", args_schema=LookupInput)
-def lookup_booking(contact_info: str) -> str:
+def lookup_booking(phone_number: str) -> str:
     """
-    Looks up existing bookings for a patient using their email or phone number.
+    Looks up existing bookings for a patient using their phone number.
     """
     invalid_placeholders = ["unknown", "n/a", "none", "", "not provided", "tbd", "placeholder", "null"]
     
-    if not contact_info or contact_info.lower().strip() in invalid_placeholders or len(contact_info) < 4:
-        return json.dumps({"success": False, "message": "Error: You must ask the user for their real contact info (email or phone) before calling this tool. Do not guess it."})
+    if not phone_number or phone_number.lower().strip() in invalid_placeholders or len(phone_number) < 4:
+        return json.dumps({"success": False, "message": "Error: You must ask the user for their real phone number before calling this tool. Do not guess it."})
         
     db = SessionLocal()
     try:
-        bookings = db.query(Booking).filter(Booking.contact_info.ilike(f"%{contact_info}%")).all()
+        bookings = db.query(Booking).filter(Booking.phone_number.ilike(f"%{phone_number}%")).all()
         if not bookings:
-            return json.dumps({"success": False, "message": "No bookings found for this contact info."})
+            return json.dumps({"success": False, "message": "No bookings found for this phone number."})
         
         results = []
         for b in bookings:
@@ -134,7 +158,8 @@ def lookup_booking(contact_info: str) -> str:
                 "id": b.id,
                 "service": b.booking_type,
                 "patient": b.patient_name,
-                "contact": b.contact_info,
+                "phone": b.phone_number,
+                "email": b.email,
                 "details": b.details,
                 "date": b.created_at.strftime('%Y-%m-%d'),
                 "status": b.status
