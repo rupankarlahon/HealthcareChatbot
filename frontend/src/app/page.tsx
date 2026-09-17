@@ -174,7 +174,7 @@ export default function Home() {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const mainRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
