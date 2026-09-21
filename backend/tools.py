@@ -93,6 +93,50 @@ def create_booking(booking_type: str, patient_name: str, phone_number: str, deta
             wb.save(excel_path)
         except Exception as excel_err:
             print(f"Warning: Failed to save to Excel: {excel_err}")
+            
+        # Write to Google Sheets (if configured)
+        try:
+            import os
+            import json
+            import gspread
+            from google.oauth2.service_account import Credentials
+            
+            creds_json_str = os.getenv("GOOGLE_CREDS_JSON")
+            sheet_id = os.getenv("GOOGLE_SHEET_ID")
+            
+            if creds_json_str and sheet_id:
+                # Parse the JSON string
+                creds_dict = json.loads(creds_json_str)
+                
+                # Setup credentials with required scopes
+                scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+                credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+                
+                # Authorize gspread
+                gc = gspread.authorize(credentials)
+                
+                # Open the sheet by ID
+                sh = gc.open_by_key(sheet_id)
+                worksheet = sh.sheet1
+                
+                # If sheet is empty, add headers first
+                if len(worksheet.get_all_values()) == 0:
+                    worksheet.append_row(["ID", "Date", "Service", "Patient Name", "Phone", "Email", "Details", "Status"])
+                
+                # Append the new booking
+                worksheet.append_row([
+                    new_booking.id,
+                    new_booking.created_at.strftime("%Y-%m-%d %H:%M:%S") if new_booking.created_at else "",
+                    new_booking.booking_type,
+                    new_booking.patient_name,
+                    new_booking.phone_number,
+                    new_booking.email or "N/A",
+                    new_booking.details,
+                    new_booking.status
+                ])
+                print("DEBUG: Successfully saved to Google Sheets")
+        except Exception as sheets_err:
+            print(f"Warning: Failed to save to Google Sheets: {sheets_err}")
         
         # Dispatch WhatsApp Receipt
         send_whatsapp_receipt(
