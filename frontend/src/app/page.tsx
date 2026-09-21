@@ -349,7 +349,7 @@ export default function Home() {
             </div>
 
             {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-6" ref={mainRef}>
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 sm:px-10 py-6" ref={mainRef}>
               <div className="space-y-6">
                 {messages.map((msg, idx) => (
                   <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex w-full gap-4 items-center ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -373,7 +373,7 @@ export default function Home() {
                          <div className="absolute left-[-6px] top-1/2 -translate-y-1/2 w-[12px] h-[12px] bg-white border-b border-l border-white/50 rotate-45 rounded-[2px]" />
                       )}
 
-                      <div className="text-[15px] leading-relaxed relative z-10">
+                      <div className="text-[15px] leading-relaxed relative z-10 break-words whitespace-pre-wrap overflow-hidden">
                         {renderMessageContent(msg.text)}
                       </div>
                       
