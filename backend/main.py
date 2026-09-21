@@ -38,7 +38,8 @@ async def chat_endpoint(req: ChatRequest):
         reply, ui_card = handle_chat_with_agent(req.message, req.user_id)
         return ChatResponse(reply=reply, ui_card=ui_card)
     except Exception as e:
-        return ChatResponse(reply=f"Agent Error: {str(e)}", ui_card=None)
+        print(f"ERROR [chat_endpoint]: {str(e)}")
+        return ChatResponse(reply="I apologize, but I encountered a technical issue while processing your request. Please try again.", ui_card=None)
 
 @app.get("/health")
 def health_check():

@@ -4,6 +4,7 @@ from database import SessionLocal, Booking
 from email_service import send_booking_email
 from whatsapp_service import send_whatsapp_receipt
 import json
+import os
 
 class BookingInput(BaseModel):
     booking_type: str = Field(default="", description="The type of service (e.g. 'Medicine Delivery', 'Lab Collection', 'Home Care Nurse')")
@@ -68,7 +69,6 @@ def create_booking(booking_type: str, patient_name: str, phone_number: str, deta
         
         # Dual-write to Excel
         try:
-            import os
             from openpyxl import Workbook, load_workbook
             excel_path = "bookings.xlsx"
             if not os.path.exists(excel_path):
@@ -96,8 +96,6 @@ def create_booking(booking_type: str, patient_name: str, phone_number: str, deta
             
         # Write to Google Sheets (if configured)
         try:
-            import os
-            import json
             import gspread
             from google.oauth2.service_account import Credentials
             
